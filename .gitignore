@@ -2,6 +2,7 @@
 *.doc
 *.docx
 __pycache__/
+*.py[cod]
 venv/
 .env
 .vscode/
