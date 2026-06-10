@@ -1,0 +1,1 @@
+# This directory is now ignored by .gitignore
