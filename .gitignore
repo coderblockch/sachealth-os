@@ -1,9 +1,18 @@
-.~lock.*#
-*.doc
-*.docx
+# Python
 __pycache__/
 *.py[cod]
 venv/
 .env
+
+# Database (se genera sola, no se sube)
+*.db
+sachealth.db
+
+# Office lock files
+.~lock.*#
+*.doc
+*.docx
+
+# Editor / OS
 .vscode/
 .DS_Store

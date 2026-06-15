@@ -73,4 +73,10 @@ async def analyze_patient(data: TriageRequest):
         "color": "bg-red-500" if priority == 1 else "bg-yellow-500" if priority == 2 else "bg-green-500"
     }
 
+from sqlmodel import Session, select
+from database import engine, create_db_and_tables, get_session
+from models import Bed
+from fastapi import Depends
 
+
+ 
