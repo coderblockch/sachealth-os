@@ -13,6 +13,26 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
+@app.on_event("startup")
+def on_startup():
+    # Runs once when the server starts
+    create_db_and_tables()
+
+    # Seed initial beds only if the table is empty
+    with Session(engine) as session:
+        existing = session.exec(select(Bed)).first()
+        if not existing:
+            initial_beds = [
+                Bed(num="101", status="Occupied", patient="John Doe"),
+                Bed(num="102", status="Pending_Discharge", patient="Jane Smith"),
+                Bed(num="103", status="Available", patient=None),
+                Bed(num="104", status="Cleaning", patient=None),
+                Bed(num="105", status="Pending_Discharge", patient="Robert Wilson"),
+            ]
+            session.add_all(initial_beds)
+            session.commit()
+            print("✅ Database seeded with initial beds")
+
 # --- MODELS FOR AI TRIAGE ---
 class TriageRequest(BaseModel):
     patient_name: str
@@ -25,13 +45,11 @@ async def root():
     return {"message": "Sachealth OS is Alive!"}
 
 @app.get("/beds")
-async def get_beds():
-    return [
-        {"id": "1", "num": "101", "status": "Occupied", "patient": "John Doe"},
-        {"id": "2", "num": "102", "status": "Pending_Discharge", "patient": "Jane Smith"},
-        {"id": "3", "num": "103", "status": "Available", "patient": None},
-        {"id": "4", "num": "104", "status": "Cleaning", "patient": None},
-    ]
+def get_beds():
+    # Open a session and query all beds from the database
+    with Session(engine) as session:
+        beds = session.exec(select(Bed)).all()
+        return beds
 
 @app.post("/triage/analyze")
 async def analyze_patient(data: TriageRequest):

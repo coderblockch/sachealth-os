@@ -16,3 +16,5 @@ sachealth.db
 # Editor / OS
 .vscode/
 .DS_Store
+*.save
+*.save.*

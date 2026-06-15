@@ -1,4 +1,4 @@
- from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel, create_engine, Session
 
 # Name of the SQLite database file (created automatically on first run)
 DATABASE_FILE = "sachealth.db"
