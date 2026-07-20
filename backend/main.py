@@ -1,16 +1,27 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="SacHealth OS Core")
 
+# Restrict CORS to an explicit allow-list. Configure via the
+# ALLOWED_ORIGINS env var (comma-separated); defaults to local development.
+_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 @app.on_event("startup")
@@ -35,10 +46,10 @@ def on_startup():
 
 # --- MODELS FOR AI TRIAGE ---
 class TriageRequest(BaseModel):
-    patient_name: str
-    age: int
-    symptoms: str
-    oxygen_level: int
+    patient_name: str = Field(min_length=1, max_length=120)
+    age: int = Field(ge=0, le=130)
+    symptoms: str = Field(default="", max_length=2000)
+    oxygen_level: int = Field(ge=0, le=100)
 
 @app.get("/")
 async def root():
