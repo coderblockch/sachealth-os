@@ -73,9 +73,11 @@
  
     <script>
         // Base URL of the FastAPI backend.
-        // For local development it points to localhost.
-        // When deployed, replace with your live backend URL (e.g. https://sachealth-api.onrender.com)
-        const API_URL = "http://127.0.0.1:8000";
+        // For local development it defaults to localhost.
+        // When deployed, set `window.API_URL` (e.g. via a small inline
+        // <script>window.API_URL = "https://sachealth-api.onrender.com"</script>
+        // injected at deploy time) to override the default below.
+        const API_URL = window.API_URL || "http://127.0.0.1:8000";
 
         // Shared base classes for the connection-status pill in the header.
         const STATUS_PILL_BASE = "text-xs px-3 py-1 rounded-full font-mono";
