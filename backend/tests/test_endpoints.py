@@ -47,6 +47,6 @@ def test_startup_does_not_reseed_when_beds_exist(patched_engine):
 
 def test_cors_headers_present(client):
     response = client.get("/", headers={"Origin": "http://example.com"})
-    # With allow_credentials enabled the middleware echoes the request origin.
-    assert response.headers["access-control-allow-origin"] == "http://example.com"
-    assert response.headers["access-control-allow-credentials"] == "true"
+    # Wildcard origin without credentials is the spec-valid configuration.
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in response.headers
