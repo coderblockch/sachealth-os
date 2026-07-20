@@ -1,7 +1,16 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
+
+from database import engine, create_db_and_tables
+from models import Bed
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("sachealth")
 
 app = FastAPI(title="SacHealth OS Core")
 
@@ -16,22 +25,30 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     # Runs once when the server starts
-    create_db_and_tables()
+    try:
+        create_db_and_tables()
+    except SQLAlchemyError:
+        logger.exception("Failed to create database and tables on startup")
+        raise
 
     # Seed initial beds only if the table is empty
-    with Session(engine) as session:
-        existing = session.exec(select(Bed)).first()
-        if not existing:
-            initial_beds = [
-                Bed(num="101", status="Occupied", patient="John Doe"),
-                Bed(num="102", status="Pending_Discharge", patient="Jane Smith"),
-                Bed(num="103", status="Available", patient=None),
-                Bed(num="104", status="Cleaning", patient=None),
-                Bed(num="105", status="Pending_Discharge", patient="Robert Wilson"),
-            ]
-            session.add_all(initial_beds)
-            session.commit()
-            print("✅ Database seeded with initial beds")
+    try:
+        with Session(engine) as session:
+            existing = session.exec(select(Bed)).first()
+            if not existing:
+                initial_beds = [
+                    Bed(num="101", status="Occupied", patient="John Doe"),
+                    Bed(num="102", status="Pending_Discharge", patient="Jane Smith"),
+                    Bed(num="103", status="Available", patient=None),
+                    Bed(num="104", status="Cleaning", patient=None),
+                    Bed(num="105", status="Pending_Discharge", patient="Robert Wilson"),
+                ]
+                session.add_all(initial_beds)
+                session.commit()
+                logger.info("Database seeded with initial beds")
+    except SQLAlchemyError:
+        logger.exception("Failed to seed initial beds on startup")
+        raise
 
 # --- MODELS FOR AI TRIAGE ---
 class TriageRequest(BaseModel):
@@ -47,13 +64,17 @@ async def root():
 @app.get("/beds")
 def get_beds():
     # Open a session and query all beds from the database
-    with Session(engine) as session:
-        beds = session.exec(select(Bed)).all()
-        return beds
+    try:
+        with Session(engine) as session:
+            beds = session.exec(select(Bed)).all()
+            return beds
+    except SQLAlchemyError:
+        logger.exception("Failed to fetch beds from the database")
+        raise HTTPException(status_code=500, detail="Could not retrieve bed data")
 
 @app.post("/triage/analyze")
 async def analyze_patient(data: TriageRequest):
-    print(f"📡 ANALYZING PATIENT: {data.patient_name}")
+    logger.info("Analyzing patient: %s", data.patient_name)
     
     # --- SIMPLE AI LOGIC ENGINE ---
     priority = 3 # Default: Stable
@@ -90,11 +111,3 @@ async def analyze_patient(data: TriageRequest):
         "urgency": urgency,
         "color": "bg-red-500" if priority == 1 else "bg-yellow-500" if priority == 2 else "bg-green-500"
     }
-
-from sqlmodel import Session, select
-from database import engine, create_db_and_tables, get_session
-from models import Bed
-from fastapi import Depends
-
-
- 
