@@ -59,21 +59,23 @@ async def analyze_patient(data: TriageRequest):
     priority = 3 # Default: Stable
     recommendation = "General Ward"
     urgency = "Moderate"
-    
+
+    symptoms = data.symptoms.lower()
+
     # Rule 1: Critical Oxygen or Chest Pain
-    if data.oxygen_level < 90 or "chest pain" in data.symptoms.lower():
+    if data.oxygen_level < 90 or "chest pain" in symptoms:
         priority = 1
         recommendation = "ICU (Immediate)"
         urgency = "CRITICAL"
     
     # Rule 2: Elderly with respiratory issues
-    elif data.age > 70 and "cough" in data.symptoms.lower():
+    elif data.age > 70 and "cough" in symptoms:
         priority = 2
         recommendation = "Respiratory Unit"
         urgency = "High"
     
     # Rule 3: Mild symptoms
-    elif "fever" in data.symptoms.lower() or "headache" in data.symptoms.lower():
+    elif "fever" in symptoms or "headache" in symptoms:
         priority = 3
         recommendation = "Urgent Care / Clinic"
         urgency = "Moderate"

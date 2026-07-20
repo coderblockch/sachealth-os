@@ -76,6 +76,18 @@
         // For local development it points to localhost.
         // When deployed, replace with your live backend URL (e.g. https://sachealth-api.onrender.com)
         const API_URL = "http://127.0.0.1:8000";
+
+        // Shared base classes for the connection-status pill in the header.
+        const STATUS_PILL_BASE = "text-xs px-3 py-1 rounded-full font-mono";
+
+        // Shared helper: sends a request to the backend, validates the
+        // response, and returns the parsed JSON. Centralizes the fetch +
+        // error-handling pattern reused by every API call.
+        async function apiFetch(path, options) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (!response.ok) throw new Error('Backend error: ' + response.status);
+            return response.json();
+        }
  
         function getColor(status) {
             if (status === 'Available') return 'bg-green-500';
@@ -87,9 +99,7 @@
         function setStatus(text, ok) {
             const el = document.getElementById('status');
             el.textContent = text;
-            el.className = ok
-                ? "text-xs bg-green-900 text-green-200 px-3 py-1 rounded-full font-mono"
-                : "text-xs bg-red-900 text-red-200 px-3 py-1 rounded-full font-mono";
+            el.className = `${STATUS_PILL_BASE} ${ok ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`;
         }
  
         // --- Fetch beds from the backend (real full-stack call) ---
@@ -98,9 +108,7 @@
             grid.innerHTML = '<p class="text-slate-500 col-span-2">Loading beds...</p>';
  
             try {
-                const response = await fetch(`${API_URL}/beds`);
-                if (!response.ok) throw new Error('Backend error: ' + response.status);
-                const beds = await response.json();
+                const beds = await apiFetch('/beds');
  
                 grid.innerHTML = '';
                 beds.forEach(bed => {
@@ -136,7 +144,7 @@
             const urgEl = document.getElementById('res-urg');
  
             try {
-                const response = await fetch(`${API_URL}/triage/analyze`, {
+                const data = await apiFetch('/triage/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -146,8 +154,6 @@
                         oxygen_level: o2
                     })
                 });
-                if (!response.ok) throw new Error('Backend error: ' + response.status);
-                const data = await response.json();
  
                 box.className = `mt-6 p-4 rounded-xl border ${data.color} text-slate-900 font-bold shadow-xl`;
                 recEl.innerHTML = data.recommendation;
