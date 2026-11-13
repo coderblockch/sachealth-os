@@ -1,8 +1,9 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from database import create_db_and_tables, engine
@@ -35,20 +36,34 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SacHealth OS Core", lifespan=lifespan)
 
+# Restrict CORS to an explicit allow-list. Configure via the
+# ALLOWED_ORIGINS env var (comma-separated); defaults to the local
+# development servers used in the README.
+_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5500,http://127.0.0.1:5500,"
+        "http://localhost:8080,http://127.0.0.1:8080,"
+        "https://coderblockch.github.io",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
 class TriageRequest(BaseModel):
-    patient_name: str
-    age: int
-    symptoms: str
-    oxygen_level: int
+    patient_name: str = Field(min_length=1, max_length=120)
+    age: int = Field(ge=0, le=130)
+    symptoms: str = Field(default="", max_length=2000)
+    oxygen_level: int = Field(ge=0, le=100)
 
 
 @app.get("/")
