@@ -61,3 +61,24 @@ def test_triage_rejects_out_of_range_input(client):
     assert client.post("/triage/analyze", json=payload).status_code == 422
     payload = {"patient_name": "", "age": 30, "symptoms": "", "oxygen_level": 95}
     assert client.post("/triage/analyze", json=payload).status_code == 422
+
+
+def test_get_beds_returns_500_on_database_error(client, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    import main
+
+    class BrokenSession:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            raise OperationalError("SELECT", {}, Exception("db down"))
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(main, "Session", BrokenSession)
+    response = client.get("/beds")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Could not retrieve bed data"}
