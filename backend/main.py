@@ -38,7 +38,7 @@ app = FastAPI(title="SacHealth OS Core", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,7 +53,7 @@ class TriageRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"message": "SacHealth OS is alive!"}
+    return {"message": "Sachealth OS is Alive!"}
 
 
 @app.get("/beds")

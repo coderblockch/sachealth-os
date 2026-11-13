@@ -4,6 +4,12 @@ __pycache__/
 venv/
 .env
 
+# Test / coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
 # Database (se genera sola, no se sube)
 *.db
 sachealth.db
