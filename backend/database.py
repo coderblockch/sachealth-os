@@ -5,7 +5,7 @@ DATABASE_FILE = "sachealth.db"
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
 
 # The engine is the core connection to the database
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False)
 
 
 def create_db_and_tables():
