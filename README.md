@@ -79,6 +79,18 @@ python3 -m http.server 5500
 
 ---
 
+## 🧪 Running Tests
+
+The backend has **27 pytest tests** covering the triage rules, the API endpoints (including validation, CORS, and database errors), the models, and the database seeding. Each test runs against an isolated in-memory SQLite database.
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+---
+
 ## 📁 Project Structure
 
 ```
