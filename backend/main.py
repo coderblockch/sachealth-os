@@ -1,20 +1,16 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from sqlmodel import Session, select
 
-app = FastAPI(title="SacHealth OS Core")
+from database import engine, create_db_and_tables
+from models import Bed
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
-)
 
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     # Runs once when the server starts
     create_db_and_tables()
 
@@ -32,6 +28,20 @@ def on_startup():
             session.add_all(initial_beds)
             session.commit()
             print("✅ Database seeded with initial beds")
+
+    yield
+
+
+app = FastAPI(title="SacHealth OS Core", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=False,
+    allow_methods=["*"], 
+    allow_headers=["*"], 
+)
+
 
 # --- MODELS FOR AI TRIAGE ---
 class TriageRequest(BaseModel):
@@ -90,11 +100,3 @@ async def analyze_patient(data: TriageRequest):
         "urgency": urgency,
         "color": "bg-red-500" if priority == 1 else "bg-yellow-500" if priority == 2 else "bg-green-500"
     }
-
-from sqlmodel import Session, select
-from database import engine, create_db_and_tables, get_session
-from models import Bed
-from fastapi import Depends
-
-
- 
