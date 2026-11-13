@@ -2,24 +2,27 @@
 
 > A HealthTech prototype that streamlines critical-patient flow and reduces hospital bottlenecks, inspired by the saturation challenges faced by hospitals in Sacramento, CA.
 
-🔗 **[Live Demo](https://coderblockch.github.io/sachealth-os/)** &nbsp;·&nbsp; *(enable GitHub Pages to activate)*
+![SacHealth OS screenshot](docs/screenshot.png)
+
+*Runs locally as a full-stack app (FastAPI backend + HTML/JS frontend). See [Running Locally](#️-running-locally).*
 
 ---
 
 ## 🚀 Overview
 
-SacHealth OS helps emergency departments prioritize high-risk patients and manage limited resources in real time. It combines a **rule-based Clinical Decision Support System (CDSS)** for triage with a live **bed-management dashboard**, plus an insurance authorization workflow to reduce administrative delays.
+SacHealth OS helps emergency departments prioritize high-risk patients and see bed availability at a glance. It combines a **rule-based Clinical Decision Support System (CDSS)** for triage with a **bed-management dashboard** backed by a FastAPI REST API and a SQLite database.
 
-The system is designed around **graceful degradation**: the interface stays fully functional even if the backend is unavailable, ensuring clinicians always have access to critical information.
+The frontend handles failures gracefully: if the API is unreachable, it shows a clear **BACKEND OFFLINE** status and error messages instead of breaking.
 
 ---
 
 ## 🌟 Key Features
 
 - **Clinical Decision Support System (CDSS):** A rule-based triage engine that assigns patient priority levels using established clinical thresholds (e.g. oxygen saturation, chest-pain indicators) to recommend the appropriate care level — from ICU to standard observation.
-- **Bed Management Dashboard:** Real-time visualization of hospital capacity and occupancy.
-- **Insurance Authorization Workflow:** Streamlined tracking of approval status to cut administrative bottlenecks.
-- **Dark-Mode Clinical UI:** A focused, low-glare interface suited to high-stress hospital environments.
+- **Bed Management Dashboard:** Bed cards loaded from the API, color-coded by status (Available, Occupied, Pending Discharge, Cleaning) with the assigned patient.
+- **REST API + Database:** FastAPI endpoints (`GET /beds`, `POST /triage/analyze`) with Pydantic request validation and SQLModel/SQLite persistence; the database is created and seeded with sample beds on first run.
+- **Connection Status & Error Handling:** A live SYSTEM ONLINE / BACKEND OFFLINE badge and friendly messages when the API is down.
+- **Dark-Mode Clinical UI:** A focused, low-glare interface (Tailwind CSS + Lucide icons) suited to high-stress hospital environments.
 
 ---
 
@@ -27,21 +30,23 @@ The system is designed around **graceful degradation**: the interface stays full
 
 | Layer | Technologies |
 |-------|--------------|
-| **Frontend** | HTML5, CSS3 (Dark-Mode UI), JavaScript (ES6+) |
-| **Backend** | Python, FastAPI, Pydantic |
-| **Architecture** | Client-side logic with graceful degradation; REST API |
+| **Frontend** | HTML5, Tailwind CSS (CDN), Lucide icons, JavaScript (ES6+, Fetch API) |
+| **Backend** | Python, FastAPI, Pydantic, Uvicorn |
+| **Database** | SQLite via SQLModel (SQLAlchemy) |
+| **Architecture** | REST API consumed by a static frontend |
 
 ---
 
 ## 🧠 How the Triage Engine Works
 
-The CDSS evaluates patient vitals and symptoms against clinical rules to assign one of several priority levels. For example:
+The CDSS (`POST /triage/analyze`) evaluates the patient's age, O₂ saturation, and symptoms against these rules, in order:
 
 | Condition | Priority | Recommendation |
 |-----------|----------|----------------|
-| O₂ saturation < 90% or chest pain | **1 — Critical** | ICU (Immediate) |
-| Moderate symptoms | **2 — Urgent** | Monitored bed |
-| Stable vitals | **3 — Standard** | General observation |
+| O₂ saturation < 90% or "chest pain" | **1 — Critical** | ICU (Immediate) |
+| Age > 70 with "cough" | **2 — High** | Respiratory Unit |
+| "fever" or "headache" | **3 — Moderate** | Urgent Care / Clinic |
+| None of the above | **4 — Low** | Outpatient Clinic |
 
 > This is a **rule-based** system grounded in clinical logic — a recognized and widely used category of decision support in real healthcare settings. It does not use machine learning; priorities are deterministic and fully auditable, which is often *preferred* in clinical contexts for transparency and safety.
 
@@ -49,27 +54,27 @@ The CDSS evaluates patient vitals and symptoms against clinical rules to assign 
 
 ## ⚙️ Running Locally
 
-### Frontend (works standalone)
-
-The dashboard runs without the backend thanks to graceful degradation:
+### 1. Backend (FastAPI)
 
 ```bash
 git clone https://github.com/coderblockch/sachealth-os.git
-cd sachealth-os
-# Open index.html in your browser, or serve it:
-python3 -m http.server 8000
-# Visit http://localhost:8000
-```
-
-### Backend (FastAPI)
-
-```bash
-cd backend
+cd sachealth-os/backend
 python3 -m venv venv
 source venv/bin/activate      # On Windows: venv\Scripts\activate
-pip install fastapi uvicorn pydantic
+pip install fastapi uvicorn sqlmodel
 uvicorn main:app --reload
-# API available at http://localhost:8000
+# API available at http://127.0.0.1:8000 (interactive docs at /docs)
+```
+
+On first start it creates `sachealth.db` and seeds five sample beds.
+
+### 2. Frontend
+
+In a second terminal, from the project root, serve the page on a different port (the frontend calls the API at `http://127.0.0.1:8000`):
+
+```bash
+python3 -m http.server 5500
+# Visit http://localhost:5500
 ```
 
 ---
@@ -78,10 +83,15 @@ uvicorn main:app --reload
 
 ```
 sachealth-os/
-├── index.html        # Frontend dashboard (triage + bed management)
+├── index.html          # Frontend dashboard (triage + bed management)
 ├── backend/
-│   └── main.py       # FastAPI backend (triage logic, insurance workflow)
+│   ├── main.py         # FastAPI app: /beds, /triage/analyze, startup seeding
+│   ├── models.py       # SQLModel Bed table
+│   └── database.py     # SQLite engine and table creation
+├── docs/
+│   └── screenshot.png
 ├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
@@ -89,8 +99,10 @@ sachealth-os/
 
 ## 🗺️ Roadmap
 
-- [ ] Connect frontend to the FastAPI backend for live data.
-- [ ] Persist patient and bed data in a database (PostgreSQL).
+- [x] Connect the frontend to the FastAPI backend.
+- [x] Persist bed data in a database (SQLite via SQLModel).
+- [ ] Save triaged patients and assign them to beds.
+- [ ] Move to PostgreSQL for production.
 - [ ] Add authentication for clinical staff roles.
 - [ ] Deploy the full stack (frontend + API) to a cloud host.
 
