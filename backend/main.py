@@ -1,13 +1,17 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from database import create_db_and_tables, engine
 from models import Bed
+
+logger = logging.getLogger("sachealth")
 
 
 def seed_beds() -> None:
@@ -25,6 +29,7 @@ def seed_beds() -> None:
             ]
         )
         session.commit()
+        logger.info("Database seeded with initial beds")
 
 
 @asynccontextmanager
@@ -73,8 +78,12 @@ async def root():
 
 @app.get("/beds")
 def get_beds():
-    with Session(engine) as session:
-        return session.exec(select(Bed)).all()
+    try:
+        with Session(engine) as session:
+            return session.exec(select(Bed)).all()
+    except SQLAlchemyError:
+        logger.exception("Failed to fetch beds from the database")
+        raise HTTPException(status_code=500, detail="Could not retrieve bed data")
 
 
 @app.post("/triage/analyze")
