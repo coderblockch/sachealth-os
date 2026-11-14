@@ -1,4 +1,7 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
 sqlmodel
+bcrypt
+PyJWT
+psycopg[binary]

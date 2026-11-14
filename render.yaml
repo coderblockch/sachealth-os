@@ -1,0 +1,23 @@
+# Render Blueprint: one free web service that serves the FastAPI API and the
+# static dashboard (index.html) from the same origin.
+services:
+  - type: web
+    name: sachealth-os
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: JWT_SECRET
+        generateValue: true
+      # Optional: point at PostgreSQL instead of the default SQLite file.
+      # Free-tier disks are ephemeral, so the SQLite demo data is re-seeded
+      # whenever the instance restarts or redeploys.
+      - key: DATABASE_URL
+        sync: false

@@ -16,3 +16,11 @@ class Bed(SQLModel, table=True):
 
     # Patient name. Optional because an empty bed has no patient.
     patient: Optional[str] = None
+
+
+class User(SQLModel, table=True):
+    # Clinical staff account. Passwords are stored only as bcrypt hashes.
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True, unique=True)
+    full_name: str = ""
+    hashed_password: str
