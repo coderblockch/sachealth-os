@@ -100,3 +100,18 @@ def test_update_missing_bed_returns_404(client):
     token = _token(client)
     response = client.patch("/beds/9999", json={"status": "Cleaning"}, headers=_auth(token))
     assert response.status_code == 404
+
+
+def test_rotating_demo_password_invalidates_old_one(patched_engine, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    with TestClient(main.app):
+        pass
+    monkeypatch.setattr(main, "DEMO_USER_PASSWORD", "rotated-password")
+    with TestClient(main.app) as client:
+        old = client.post("/auth/login", json=DEMO)
+        new = client.post(
+            "/auth/login", json={"email": DEMO["email"], "password": "rotated-password"}
+        )
+    assert old.status_code == 401
+    assert new.status_code == 200

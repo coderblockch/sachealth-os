@@ -96,9 +96,10 @@
         // - Served by FastAPI itself (production on Render, or uvicorn locally
         //   at :8000): same origin, so relative paths are used.
         // - Served by a separate static server (python -m http.server 5500,
-        //   Live Server) or opened as a file: the API runs on 127.0.0.1:8000.
+        //   on port 5500 as in the README) or opened as a file: the API runs on
+        //   127.0.0.1:8000.
         // A deployment can also set window.API_URL in an earlier script.
-        const STATIC_DEV = location.protocol === 'file:' || ['5500', '8080'].includes(location.port);
+        const STATIC_DEV = location.protocol === 'file:' || location.port === '5500';
         const API_URL = window.API_URL || (STATIC_DEV ? "http://127.0.0.1:8000" : "");
         const BED_STATUSES = ['Available', 'Occupied', 'Pending_Discharge', 'Cleaning'];
 
@@ -298,7 +299,8 @@
         }
  
         window.onload = async () => {
-            lucide.createIcons();
+            // Icons are decorative: never let a CDN failure block the app.
+            try { lucide.createIcons(); } catch (error) { console.warn('Icons unavailable', error); }
             await loadCurrentUser();
             renderBeds();
         };

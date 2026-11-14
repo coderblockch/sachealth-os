@@ -12,7 +12,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
-from auth import authenticate, create_access_token, get_current_user, hash_password
+from auth import (
+    authenticate,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from database import create_db_and_tables, engine
 from models import Bed, User
 
@@ -48,7 +54,13 @@ def seed_demo_user() -> None:
     """Create the demo staff account if it does not exist yet."""
     email = DEMO_USER_EMAIL.strip().lower()
     with Session(engine) as session:
-        if session.exec(select(User).where(User.email == email)).first():
+        existing = session.exec(select(User).where(User.email == email)).first()
+        if existing:
+            # Keep the stored hash in sync if DEMO_USER_PASSWORD was rotated.
+            if not verify_password(DEMO_USER_PASSWORD, existing.hashed_password):
+                existing.hashed_password = hash_password(DEMO_USER_PASSWORD)
+                session.add(existing)
+                session.commit()
             return
         session.add(
             User(
