@@ -1,10 +1,17 @@
 """Unit tests for the root and bed-management endpoints."""
 
 
-def test_root_returns_liveness_message(client):
+def test_health_returns_liveness_message(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "message": "Sachealth OS is Alive!"}
+
+
+def test_root_serves_frontend_dashboard(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Sachealth OS is Alive!"}
+    assert response.headers["content-type"].startswith("text/html")
+    assert "SacHealth" in response.text
 
 
 def test_get_beds_returns_seeded_beds(client):
@@ -46,13 +53,13 @@ def test_startup_does_not_reseed_when_beds_exist(patched_engine):
 
 
 def test_cors_allows_local_frontend(client):
-    response = client.get("/", headers={"Origin": "http://localhost:5500"})
+    response = client.get("/health", headers={"Origin": "http://localhost:5500"})
     assert response.headers["access-control-allow-origin"] == "http://localhost:5500"
     assert "access-control-allow-credentials" not in response.headers
 
 
 def test_cors_rejects_unknown_origin(client):
-    response = client.get("/", headers={"Origin": "https://evil.example"})
+    response = client.get("/health", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in response.headers
 
 

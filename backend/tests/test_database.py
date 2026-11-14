@@ -41,3 +41,14 @@ def test_get_session_yields_usable_session(monkeypatch, in_memory_engine):
 def test_database_url_is_sqlite():
     assert database.DATABASE_URL.startswith("sqlite:///")
     assert database.DATABASE_FILE in database.DATABASE_URL
+
+
+def test_resolve_database_url_defaults_to_sqlite():
+    assert database.resolve_database_url(None) == database.DEFAULT_DATABASE_URL
+    assert database.resolve_database_url("  ") == database.DEFAULT_DATABASE_URL
+
+
+def test_resolve_database_url_normalises_postgres_schemes():
+    expected = "postgresql+psycopg://u:p@db:5432/app"
+    assert database.resolve_database_url("postgres://u:p@db:5432/app") == expected
+    assert database.resolve_database_url("postgresql://u:p@db:5432/app") == expected
