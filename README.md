@@ -38,7 +38,7 @@
 - **REST API + SQL database:** FastAPI with Pydantic validation and SQLModel (SQLAlchemy) persistence. SQLite by default, PostgreSQL via `DATABASE_URL`.
 - **Resilient UI:** live SYSTEM ONLINE / BACKEND OFFLINE badge and friendly error messages when the API is down.
 - **Patients & triage history:** stored triage results, patient search, filtering and pagination, transactional bed assignment.
-- **Tested and automated:** 74 pytest tests (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
+- **Tested and automated:** 75 pytest tests (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
 
 ## 🛠️ Tech Stack
 
@@ -135,7 +135,9 @@ uvicorn main:app --reload
 |----------|---------|---------|
 | `DATABASE_URL` | `sqlite:///sachealth.db` | Any SQLAlchemy URL; `postgres://…` URLs are accepted |
 | `DB_AUTO_CREATE` | `true` | Create tables on startup (set `false` when using Alembic) |
+| `DB_RUN_MIGRATIONS` | `false` | Run `alembic upgrade head` on startup (used on Render) |
 | `SEED_DEMO_DATA` | `true` | Seed demo beds + staff user on startup |
+| `SEED_DEMO_PATIENTS` | `false` | Also seed demo patients + triage history on startup |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `5` / `5` | PostgreSQL connection pool |
 | `JWT_SECRET` | random per process | Token signing secret (set in production) |
 | `ACCESS_TOKEN_MINUTES` | `60` | Token lifetime |
@@ -156,7 +158,7 @@ API tests run against an isolated in-memory SQLite database. [GitHub Actions](ht
 
 ## ☁️ Deployment (Render)
 
-[`render.yaml`](render.yaml) defines a Render PostgreSQL database (`sachealth-db`) and the web service. `DATABASE_URL` comes from the database's internal connection string, and the start command runs `alembic upgrade head` and `python seed.py` before Uvicorn. Pushes to `main` redeploy automatically.
+[`render.yaml`](render.yaml) defines a Render PostgreSQL database (`sachealth-db`) and the web service. `DATABASE_URL` comes from the database's internal connection string. With `DB_RUN_MIGRATIONS=true` the app runs `alembic upgrade head` on startup and then seeds the demo data (idempotent), because Render's free plan has no pre-deploy command. Pushes to `main` redeploy automatically.
 
 ---
 

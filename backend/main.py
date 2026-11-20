@@ -34,8 +34,17 @@ FRONTEND_FILE = Path(__file__).resolve().parent.parent / "index.html"
 DEMO_USER_EMAIL = os.getenv("DEMO_USER_EMAIL", "demo@sachealth.dev")
 DEMO_USER_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "sachealth-demo")
 
+def _env_flag(name: str, default: str) -> bool:
+    return os.getenv(name, default).lower() in ("1", "true", "yes")
+
+
 # Seed demo beds/user on startup (disable with SEED_DEMO_DATA=false).
-SEED_DEMO_DATA = os.getenv("SEED_DEMO_DATA", "true").lower() in ("1", "true", "yes")
+SEED_DEMO_DATA = _env_flag("SEED_DEMO_DATA", "true")
+# Also seed demo patients + triage history (what `python seed.py` does).
+SEED_DEMO_PATIENTS = _env_flag("SEED_DEMO_PATIENTS", "false")
+# Apply Alembic migrations on startup (`alembic upgrade head`). Useful when the
+# host's start command only runs uvicorn.
+DB_RUN_MIGRATIONS = _env_flag("DB_RUN_MIGRATIONS", "false")
 
 
 def seed_beds() -> None:
@@ -87,10 +96,19 @@ def seed_demo_data() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if database.DB_AUTO_CREATE:
+    if DB_RUN_MIGRATIONS:
+        import migrate
+
+        migrate.upgrade_to_head(engine)
+        logger.info("Database migrated to the latest Alembic revision")
+    elif database.DB_AUTO_CREATE:
         create_db_and_tables()
     if SEED_DEMO_DATA:
         seed_demo_data()
+        if SEED_DEMO_PATIENTS:
+            import seed
+
+            seed.seed_demo_patients()
     yield
 
 

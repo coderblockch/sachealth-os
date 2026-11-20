@@ -1,9 +1,10 @@
 # Render Blueprint: a PostgreSQL database plus one web service that serves the
 # FastAPI API and the static dashboard (index.html) from the same origin.
 #
-# Schema changes are applied with Alembic before Uvicorn starts. The free web
-# plan does not support preDeployCommand; on a paid plan, move
-# "alembic upgrade head && python seed.py" to preDeployCommand instead.
+# Schema changes are applied with Alembic when the app starts
+# (DB_RUN_MIGRATIONS=true runs `alembic upgrade head` in the FastAPI lifespan),
+# because the free web plan does not support preDeployCommand. On a paid plan
+# you can instead use: preDeployCommand: cd backend && alembic upgrade head && python seed.py
 databases:
   - name: sachealth-db
     plan: free            # free Render Postgres expires after 30 days; use basic-256mb to keep data
@@ -22,13 +23,7 @@ services:
     branch: main
     autoDeploy: true
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: >-
-      cd backend &&
-      alembic upgrade head &&
-      python seed.py &&
-      uvicorn main:app --host 0.0.0.0 --port $PORT
-    # On paid plans:
-    # preDeployCommand: cd backend && alembic upgrade head && python seed.py
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -39,9 +34,14 @@ services:
           property: connectionString   # internal URL; postgres:// is normalized in database.py
       - key: JWT_SECRET
         generateValue: true
-      # Schema is owned by Alembic, so don't create tables from the app.
+      # Schema is owned by Alembic: migrate on startup, never create_all.
+      - key: DB_RUN_MIGRATIONS
+        value: "true"
       - key: DB_AUTO_CREATE
         value: "false"
-      # Idempotent demo seed (beds + demo staff account) on startup.
+      # Idempotent demo seed on startup: beds, demo staff account, and demo
+      # patients with triage history.
       - key: SEED_DEMO_DATA
+        value: "true"
+      - key: SEED_DEMO_PATIENTS
         value: "true"

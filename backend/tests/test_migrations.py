@@ -126,3 +126,26 @@ def test_seed_does_not_overwrite_edited_occupants(db_url, monkeypatch):
         row = conn.execute(text("SELECT patient, patient_id FROM bed WHERE num = '101'")).one()
     engine.dispose()
     assert row == ("Someone Else", None)
+
+
+def test_app_startup_can_run_migrations_and_seed(db_url, monkeypatch):
+    """DB_RUN_MIGRATIONS=true: the app upgrades an empty DB and seeds it."""
+    from fastapi.testclient import TestClient
+
+    import main
+
+    engine = create_engine(db_url)
+    monkeypatch.setattr(main, "engine", engine)
+    monkeypatch.setattr(database, "engine", engine)
+    monkeypatch.setattr(main, "DB_RUN_MIGRATIONS", True)
+    monkeypatch.setattr(main, "SEED_DEMO_PATIENTS", True)
+    for _ in range(2):  # a restart must be a no-op
+        with TestClient(main.app) as client:
+            assert client.get("/health").status_code == 200
+            stats = client.get("/stats").json()
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        patients = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar_one()
+    engine.dispose()
+    assert version == "0002" and patients == 4
+    assert sum(stats["beds_by_status"].values()) == 5
