@@ -258,6 +258,12 @@ def _react_build_available() -> bool:
     return (FRONTEND_DIST / "index.html").is_file()
 
 
+def _react_build_files() -> dict[str, Path]:
+    """Every file in the React build, keyed by its URL path (e.g. "assets/index.js")."""
+    root = FRONTEND_DIST.resolve()
+    return {file.relative_to(root).as_posix(): file for file in root.rglob("*") if file.is_file()}
+
+
 @app.get("/", include_in_schema=False)
 def frontend():
     """Send visitors to the React app when it has been built; otherwise serve
@@ -283,13 +289,15 @@ def react_app(path: str = ""):
             status_code=404,
             detail="React frontend not built. Run: cd frontend && npm ci && npm run build",
         )
-    root = FRONTEND_DIST.resolve()
-    candidate = (root / path).resolve()
-    if path and candidate.is_file() and candidate.is_relative_to(root):
-        return FileResponse(candidate)
+    # Only files that exist in the build can be served: the request path is
+    # looked up in this map, never joined onto the filesystem, so "../" tricks
+    # cannot reach anything outside frontend/dist.
+    files = _react_build_files()
+    if path in files:
+        return FileResponse(files[path])
     if path.startswith("assets/"):
         raise HTTPException(status_code=404, detail="Not found")
-    return FileResponse(root / "index.html")
+    return FileResponse(files["index.html"])
 
 
 @app.get("/health")
