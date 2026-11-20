@@ -142,10 +142,10 @@ Mutation errors are shown next to the action. For example, a **409** "Bed is Occ
 |------|-----------|
 | **Login** | Zod-validated form, server error shown in an alert, redirect back to `from`. |
 | **Dashboard** | One query (`/stats`); totals and occupancy are derived in render, not stored in state. Dependency-free `BarChart` (CSS widths). |
-| **Triage** | `TriageForm` switches between new/existing patient with `useWatch`. The result card links to the patient. `TriageHistory` filters by priority and paginates. |
-| **Patients** | Search is **debounced** (`useDebouncedValue`, 300 ms), so typing "zoe" sends one request, not three. A new search resets to page 1. Register form below. |
+| **Triage** | `TriageForm` switches between new/existing patient with `useWatch`. Existing patients are chosen with `PatientPicker`, which searches the API (`q` + `limit`) instead of loading everyone, so patient #1 is reachable even with thousands of records. The result card links to the patient. `TriageHistory` filters by priority and paginates. |
+| **Patients** | Search is **debounced** (`useDebouncedValue`, 300 ms), so typing "zoe" sends one request, not three. When the search settles it is written to the URL (`?q=zoe`) and the page resets to 1, so a reload shows the same results. Register form below. |
 | **Patient detail** | Current bed + triage timeline. A 404 shows "Patient not found" instead of a generic error. |
-| **Beds** | Status filter chips, a card per bed. Available beds offer only patients who are not already in a bed; occupied ones offer Discharge. |
+| **Beds** | Status filter chips, a card per bed. The board always loads every bed and filters on the client, so "who is already in a bed" is computed from all beds, not only the visible ones. Available beds offer a searchable picker without those patients; occupied ones offer Discharge. |
 
 ---
 
@@ -159,7 +159,7 @@ Principles:
 - **Mock the network at `fetch`.** `mockApi()` in `src/test/utils.tsx` is a tiny fake server keyed by `"METHOD /path"`. Tests assert on what was sent (body and query params) and on what the user sees.
 - `renderWithProviders()` gives each test a fresh QueryClient (no shared cache), a MemoryRouter, and the real AuthProvider.
 
-What is covered (32 tests): the API client (URL building, error parsing, Bearer header, 401 logout, network errors), token expiry, form schemas, login validation/success/failure, the route guard (redirect, session check, rejected token), dashboard numbers/bars/retry, the triage form (new and existing patient, validation), history filters synced to the URL, patients pagination/debounced search/registration, bed assign/discharge with a 409, and pagination edge cases.
+What is covered (38 tests): the API client (URL building, error parsing, Bearer header, 401 logout, network errors), token expiry, form schemas, login validation/success/failure, the route guard (redirect, session check, rejected token), dashboard numbers/bars/retry, the triage form (new and existing patient, validation), history filters synced to the URL, patients pagination/debounced search/registration, bed assign/discharge with a 409, the beds filter never offering a patient who is in a hidden bed, the patient picker reaching a patient outside the first page, UTC parsing of timestamps, and pagination edge cases.
 
 Also in CI: **ESLint** (React hooks rules, zero warnings), **TypeScript strict mode** (`noUncheckedIndexedAccess` included), and a production **build**.
 
@@ -198,6 +198,7 @@ Also in CI: **ESLint** (React hooks rules, zero warnings), **TypeScript strict m
 - **JWT**: signed token proving who you are; sent as `Authorization: Bearer …`.
 - **Query key**: the cache "address" of a piece of server data in TanStack Query.
 - **Invalidate**: mark cached data as stale so it is fetched again.
+- **UTC timestamps**: SQLite returns times without an offset (`2026-11-20T04:00:00`); `parseApiDate` treats those as UTC so they show in the viewer's local time, like PostgreSQL's.
 - **Debounce**: wait until the user stops typing before acting.
 - **SPA fallback**: the server returns `index.html` for unknown `/app/*` URLs so the router can handle them.
 - **Proxy (Vite)**: in development, forwards API calls from `:5173` to `:8000`.

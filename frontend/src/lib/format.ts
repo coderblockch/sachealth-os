@@ -14,6 +14,17 @@ export const BED_STATUS_INFO: Record<BedStatus, { label: string; className: stri
   Cleaning: { label: "Cleaning", className: "bg-sky-500/15 text-sky-300 ring-sky-500/40", dot: "bg-sky-400" },
 };
 
+const HAS_OFFSET = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * The API stores times in UTC. PostgreSQL returns them with an offset, but
+ * SQLite drops it ("2026-11-20T04:00:00"), and JavaScript would read that as
+ * local time. Treat offset-less timestamps as UTC.
+ */
+export function parseApiDate(iso: string): Date {
+  return new Date(HAS_OFFSET.test(iso) ? iso : `${iso}Z`);
+}
+
 export function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(parseApiDate(iso));
 }

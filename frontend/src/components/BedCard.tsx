@@ -1,16 +1,17 @@
 import { useState } from "react";
 
 import { useAssignBed, useDischargeBed } from "../api/hooks";
-import type { Bed, Patient } from "../api/types";
+import type { Bed } from "../api/types";
 import { BedStatusBadge } from "./Badges";
+import { PatientPicker } from "./PatientPicker";
 
 interface Props {
   bed: Bed;
-  /** Patients who are not in a bed yet (candidates for assignment). */
-  unassigned: Patient[];
+  /** Patients already in a bed (from the unfiltered board); they are not offered. */
+  assignedIds: ReadonlySet<number>;
 }
 
-export function BedCard({ bed, unassigned }: Props) {
+export function BedCard({ bed, assignedIds }: Props) {
   const [patientId, setPatientId] = useState("");
   const assign = useAssignBed();
   const discharge = useDischargeBed();
@@ -29,7 +30,7 @@ export function BedCard({ bed, unassigned }: Props) {
 
       {bed.status === "Available" && (
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (patientId) assign.mutate({ bedId: bed.id, patientId: Number(patientId) }, { onSuccess: () => setPatientId("") });
@@ -38,15 +39,16 @@ export function BedCard({ bed, unassigned }: Props) {
           <label htmlFor={selectId} className="sr-only">
             Patient for bed {bed.num}
           </label>
-          <select id={selectId} className="input py-1 text-sm" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-            <option value="">{unassigned.length ? "Choose patient…" : "No unassigned patients"}</option>
-            {unassigned.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="btn-primary px-3 py-1 text-sm" disabled={!patientId || assign.isPending}>
+          <PatientPicker
+            id={selectId}
+            className="input py-1 text-sm"
+            value={patientId}
+            onChange={setPatientId}
+            exclude={assignedIds}
+            searchLabel={`Search patients for bed ${bed.num}`}
+            placeholder="Choose patient…"
+          />
+          <button type="submit" className="btn-primary self-start px-3 py-1 text-sm" disabled={!patientId || assign.isPending}>
             {assign.isPending ? "Assigning…" : "Assign"}
           </button>
         </form>

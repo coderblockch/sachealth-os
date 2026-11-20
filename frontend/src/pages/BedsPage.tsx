@@ -1,4 +1,4 @@
-import { useBeds, usePatients } from "../api/hooks";
+import { useBeds } from "../api/hooks";
 import { BED_STATUSES, type BedStatus } from "../api/types";
 import { BedCard } from "../components/BedCard";
 import { EmptyState, ErrorState, LoadingState } from "../components/QueryState";
@@ -9,11 +9,11 @@ export function BedsPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get("status");
   const status = BED_STATUSES.includes(raw as BedStatus) ? (raw as BedStatus) : undefined;
-  const beds = useBeds(status);
-  const patients = usePatients({ limit: 200, offset: 0 });
-
-  const assignedIds = new Set((beds.data ?? []).map((b) => b.patient_id).filter((id) => id !== null));
-  const unassigned = (patients.data?.items ?? []).filter((p) => !assignedIds.has(p.id));
+  // Always load the whole board: the status filter only changes what is shown,
+  // so "who is already in a bed" is computed from every bed, not just the visible ones.
+  const beds = useBeds();
+  const assignedIds = new Set((beds.data ?? []).flatMap((b) => (b.patient_id === null ? [] : [b.patient_id])));
+  const visible = (beds.data ?? []).filter((b) => !status || b.status === status);
 
   return (
     <section aria-labelledby="beds-title">
@@ -43,12 +43,12 @@ export function BedsPage() {
         <LoadingState label="Loading beds…" />
       ) : beds.isError ? (
         <ErrorState error={beds.error} onRetry={() => beds.refetch()} />
-      ) : beds.data.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyState title="No beds with this status" />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {beds.data.map((bed) => (
-            <BedCard key={bed.id} bed={bed} unassigned={unassigned} />
+          {visible.map((bed) => (
+            <BedCard key={bed.id} bed={bed} assignedIds={assignedIds} />
           ))}
         </div>
       )}

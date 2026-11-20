@@ -1,16 +1,16 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Link } from "react-router-dom";
 import type { z } from "zod";
 
-import { useCreateTriage, usePatients } from "../api/hooks";
+import { useCreateTriage } from "../api/hooks";
 import { toTriageRequest, triageSchema, type TriageFormValues } from "../lib/triageForm";
 import { PriorityBadge } from "./Badges";
 import { FormField } from "./FormField";
+import { PatientPicker } from "./PatientPicker";
 
 export function TriageForm() {
   const createTriage = useCreateTriage();
-  const patients = usePatients({ limit: 100, offset: 0 });
   const {
     register,
     handleSubmit,
@@ -53,16 +53,15 @@ export function TriageForm() {
             <input className="input" autoComplete="off" {...register("patientName")} />
           </FormField>
         ) : (
-          <FormField label="Patient" error={errors.patientId?.message}>
-            <select className="input" {...register("patientId")}>
-              <option value="">Select a patient…</option>
-              {patients.data?.items.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} (#{p.id}, {p.age} y)
-                </option>
-              ))}
-            </select>
-          </FormField>
+          <Controller
+            control={control}
+            name="patientId"
+            render={({ field }) => (
+              <FormField label="Patient" error={errors.patientId?.message}>
+                <PatientPicker value={field.value ?? ""} onChange={field.onChange} />
+              </FormField>
+            )}
+          />
         )}
 
         <div className="grid grid-cols-2 gap-4">

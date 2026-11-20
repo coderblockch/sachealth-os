@@ -59,7 +59,7 @@
 - **Resilient UI:** live SYSTEM ONLINE / BACKEND OFFLINE badge and friendly error messages when the API is down.
 - **Patients & triage history:** stored triage results, patient search, filtering and pagination, transactional bed assignment.
 - **React + TypeScript app:** typed API client, JWT auth context with protected routes, TanStack Query caching, validated accessible forms, responsive layout (see the Frontend section below).
-- **Tested and automated:** 32 Vitest/React Testing Library tests for the frontend and 83 pytest tests for the API (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
+- **Tested and automated:** 38 Vitest/React Testing Library tests for the frontend and 83 pytest tests for the API (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
 
 ## 🛠️ Tech Stack
 
@@ -185,7 +185,7 @@ The React app in [`frontend/`](frontend) consumes the same API. The design decis
 | Dashboard | Stat cards and bar charts | `GET /stats` |
 | Triage | Rules-based triage for a new or existing patient, plus paginated history with a priority filter kept in the URL | `POST /triage`, `GET /triage` |
 | Patients | Debounced search, pagination, register a patient, detail page with triage timeline and current bed | `GET/POST /patients`, `GET /patients/{id}` |
-| Beds | Status grid with filters, assign a patient, discharge | `GET /beds`, `POST /beds/{id}/assign` and `/discharge` |
+| Beds | Status grid with filters, assign a patient (searchable picker), discharge | `GET /beds`, `POST /beds/{id}/assign` and `/discharge` |
 
 ```bash
 # terminal 1: API
@@ -198,7 +198,7 @@ cd frontend && npm install && npm run dev          # http://localhost:5173/app/
 cd frontend
 npm run lint        # ESLint (0 warnings allowed)
 npm run typecheck   # tsc, strict mode
-npm test            # Vitest + React Testing Library (32 tests)
+npm test            # Vitest + React Testing Library (38 tests)
 npm run build       # production build into frontend/dist, served by FastAPI at /app
 ```
 
@@ -206,7 +206,7 @@ npm run build       # production build into frontend/dist, served by FastAPI at 
 frontend/src/
 ├── api/          # types.ts (mirrors the API), client.ts (fetch + JWT + errors), endpoints.ts, hooks.ts (TanStack Query)
 ├── auth/         # AuthContext (login/logout, /auth/me), RequireAuth route guard, tokenStorage
-├── components/   # Layout, TriageForm, TriageHistory, BedCard, BarChart, Pagination, FormField, badges, loading/error/empty states
+├── components/   # Layout, TriageForm, TriageHistory, BedCard, PatientPicker, BarChart, Pagination, FormField, badges, loading/error/empty states
 ├── pages/        # Login, Dashboard, Triage, Patients, PatientDetail, Beds, NotFound
 ├── lib/          # form schemas (Zod), formatting, query client, useDebouncedValue
 └── __tests__/    # component tests (+ *.test.ts next to the code they test)

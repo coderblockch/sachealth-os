@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Link, useSearchParams } from "react-router-dom";
 import { z } from "zod";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCreatePatient, usePatients } from "../api/hooks";
 import { FormField } from "../components/FormField";
@@ -67,6 +67,15 @@ export function PatientsPage() {
   const effectiveOffset = q === (params.get("q") ?? "") ? offset : 0;
   const patients = usePatients({ q: q || undefined, limit: PAGE_SIZE, offset: effectiveOffset });
 
+  // Once the search settles, put it in the URL (and go back to page 1) so a
+  // reload or a shared link shows the same results.
+  useEffect(() => {
+    if (q === (params.get("q") ?? "")) return;
+    const nextParams = new URLSearchParams();
+    if (q) nextParams.set("q", q);
+    setParams(nextParams, { replace: true });
+  }, [q, params, setParams]);
+
   const setOffset = (next: number) => {
     const nextParams = new URLSearchParams();
     if (q) nextParams.set("q", q);
@@ -89,10 +98,7 @@ export function PatientsPage() {
               className="input"
               placeholder="Search by name…"
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setOffset(0);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </label>
           {patients.isPending ? (

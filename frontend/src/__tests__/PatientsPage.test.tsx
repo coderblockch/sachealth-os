@@ -42,6 +42,15 @@ describe("PatientsPage", () => {
     expect(searches.map((c) => c.params.q)).toEqual(["zoe"]);
   });
 
+  it("puts the settled search in the URL and starts again from page 1", async () => {
+    patientsApi();
+    renderWithProviders(<PatientsPage />, { signedIn: true, route: "/patients?offset=10" });
+    expect(await screen.findByText("Page 2 of 2 · 12 results")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox"), "zoe");
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/patients?q=zoe"));
+    expect(screen.getByRole("link", { name: "Zoe Unique" })).toBeInTheDocument();
+  });
+
   it("validates and registers a new patient", async () => {
     const fetchMock = patientsApi();
     renderWithProviders(<PatientsPage />, { signedIn: true });
