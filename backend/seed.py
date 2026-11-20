@@ -55,7 +55,14 @@ def seed_demo_patients() -> int:
             )
             if bed_num:
                 bed = session.exec(select(Bed).where(Bed.num == bed_num)).first()
-                if bed and bed.patient_id is None and bed.status in ("Occupied", "Pending_Discharge"):
+                # Only link beds that still show this demo patient; never
+                # overwrite an occupant someone has edited.
+                if (
+                    bed
+                    and bed.patient_id is None
+                    and bed.patient == name
+                    and bed.status in ("Occupied", "Pending_Discharge")
+                ):
                     bed.patient_id = patient.id
                     bed.patient = name
                     session.add(bed)

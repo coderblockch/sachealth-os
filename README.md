@@ -38,7 +38,7 @@
 - **REST API + SQL database:** FastAPI with Pydantic validation and SQLModel (SQLAlchemy) persistence. SQLite by default, PostgreSQL via `DATABASE_URL`.
 - **Resilient UI:** live SYSTEM ONLINE / BACKEND OFFLINE badge and friendly error messages when the API is down.
 - **Patients & triage history:** stored triage results, patient search, filtering and pagination, transactional bed assignment.
-- **Tested and automated:** 69 pytest tests (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
+- **Tested and automated:** 74 pytest tests (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
 
 ## 🛠️ Tech Stack
 

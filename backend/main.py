@@ -3,14 +3,14 @@ import os
 from contextlib import asynccontextmanager
 
 from pathlib import Path
-from datetime import datetime
-from typing import Generic, Literal, Optional, TypeVar
+from datetime import datetime, timezone
+from typing import Annotated, Generic, Literal, Optional, TypeVar
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, col, select
 
@@ -23,7 +23,7 @@ from auth import (
 )
 import database
 from database import create_db_and_tables, engine
-from models import Bed, Patient, TriageRecord, User
+from models import Bed, Patient, TriageRecord, User, utcnow
 
 logger = logging.getLogger("sachealth")
 
@@ -140,8 +140,13 @@ class BedUpdate(BaseModel):
     patient: Optional[str] = Field(default=None, max_length=120)
 
 
+# Strings are stripped *before* length validation, so "   " is rejected (422).
+BedNumber = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
+PersonName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+
+
 class BedCreate(BaseModel):
-    num: str = Field(min_length=1, max_length=20)
+    num: BedNumber
     status: BedStatus = "Available"
 
 
@@ -150,7 +155,7 @@ class BedAssign(BaseModel):
 
 
 class PatientCreate(BaseModel):
-    full_name: str = Field(min_length=1, max_length=120)
+    full_name: PersonName
     age: int = Field(ge=0, le=130)
 
 
@@ -159,7 +164,7 @@ class TriageCreate(BaseModel):
     patient, or ``patient_name`` to register a new one in the same transaction."""
 
     patient_id: Optional[int] = Field(default=None, gt=0)
-    patient_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    patient_name: Optional[PersonName] = None
     age: int = Field(ge=0, le=130)
     symptoms: str = Field(default="", max_length=2000)
     oxygen_level: int = Field(ge=0, le=100)
@@ -275,10 +280,11 @@ def update_bed(bed_id: int, data: BedUpdate, user: User = Depends(get_current_us
         if "status" in changes and changes["status"] is not None:
             bed.status = changes["status"]
         if "patient" in changes:
-            patient = (changes["patient"] or "").strip()
-            bed.patient = patient or None
-            # A free-text name no longer refers to a registered patient.
-            bed.patient_id = None
+            patient = (changes["patient"] or "").strip() or None
+            if patient != bed.patient:
+                # A different free-text name no longer refers to the registered patient.
+                bed.patient_id = None
+            bed.patient = patient
         if bed.status in ("Available", "Cleaning"):
             bed.patient = None
             bed.patient_id = None
@@ -333,10 +339,21 @@ def create_bed(data: BedCreate, user: User = Depends(get_current_user)):
         return bed
 
 
-def _lock_bed(session: Session, bed_id: int) -> Bed:
-    """Load a bed with a row lock (SELECT ... FOR UPDATE on PostgreSQL) so two
-    staff members cannot assign the same bed at the same time."""
-    bed = session.exec(select(Bed).where(Bed.id == bed_id).with_for_update()).first()
+def _lock_patient(session: Session, patient_id: int) -> Patient:
+    """Load a patient with a row lock (SELECT ... FOR UPDATE on PostgreSQL).
+
+    Lock order is always patient → bed, in both assign_bed and delete_patient,
+    so a patient cannot be deleted while being assigned (and vice versa)."""
+    patient = session.exec(
+        select(Patient).where(Patient.id == patient_id).with_for_update()
+    ).first()
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+
+def _get_bed_or_404(session: Session, bed_id: int) -> Bed:
+    bed = session.get(Bed, bed_id)
     if bed is None:
         raise HTTPException(status_code=404, detail="Bed not found")
     return bed
@@ -346,25 +363,35 @@ def _lock_bed(session: Session, bed_id: int) -> Bed:
 def assign_bed(bed_id: int, data: BedAssign, user: User = Depends(get_current_user)):
     """Put a registered patient in an Available bed, atomically.
 
-    Fails with 409 if the bed is not available or the patient already has a bed;
-    nothing is written in that case."""
+    The bed is claimed with a conditional ``UPDATE ... WHERE status = 'Available'``,
+    so of two concurrent requests for the same bed exactly one succeeds (on
+    SQLite and PostgreSQL alike); the unique ``bed.patient_id`` constraint stops
+    one patient from taking two beds. On failure nothing is written (409)."""
     with Session(engine) as session:
-        bed = _lock_bed(session, bed_id)
-        if bed.status != "Available":
-            raise HTTPException(status_code=409, detail=f"Bed is {bed.status}, not Available")
-        patient = session.get(Patient, data.patient_id)
-        if patient is None:
-            raise HTTPException(status_code=404, detail="Patient not found")
+        bed = _get_bed_or_404(session, bed_id)
+        patient = _lock_patient(session, data.patient_id)
         current = session.exec(select(Bed).where(Bed.patient_id == patient.id)).first()
         if current is not None:
             raise HTTPException(
                 status_code=409, detail=f"Patient already assigned to bed {current.num}"
             )
-        bed.status = "Occupied"
-        bed.patient_id = patient.id
-        bed.patient = patient.full_name
-        session.add(bed)
         try:
+            claimed = session.execute(
+                update(Bed)
+                .where(Bed.id == bed_id, Bed.status == "Available")
+                .values(
+                    status="Occupied",
+                    patient_id=patient.id,
+                    patient=patient.full_name,
+                    updated_at=utcnow(),
+                )
+            ).rowcount
+            if claimed != 1:
+                session.rollback()
+                session.refresh(bed)
+                raise HTTPException(
+                    status_code=409, detail=f"Bed is {bed.status}, not Available"
+                )
             session.commit()
         except IntegrityError:
             # Unique constraint on bed.patient_id caught a concurrent assignment.
@@ -379,13 +406,16 @@ def assign_bed(bed_id: int, data: BedAssign, user: User = Depends(get_current_us
 def discharge_bed(bed_id: int, user: User = Depends(get_current_user)):
     """Release an occupied bed: clears the patient and marks it for Cleaning."""
     with Session(engine) as session:
-        bed = _lock_bed(session, bed_id)
-        if bed.status not in ("Occupied", "Pending_Discharge"):
+        bed = _get_bed_or_404(session, bed_id)
+        released = session.execute(
+            update(Bed)
+            .where(Bed.id == bed_id, col(Bed.status).in_(("Occupied", "Pending_Discharge")))
+            .values(status="Cleaning", patient=None, patient_id=None, updated_at=utcnow())
+        ).rowcount
+        if released != 1:
+            session.rollback()
+            session.refresh(bed)
             raise HTTPException(status_code=409, detail=f"Bed is {bed.status}, nobody to discharge")
-        bed.status = "Cleaning"
-        bed.patient = None
-        bed.patient_id = None
-        session.add(bed)
         session.commit()
         session.refresh(bed)
         logger.info("Bed %s discharged by user %s", bed.num, user.id)
@@ -452,10 +482,10 @@ def delete_patient(patient_id: int, user: User = Depends(get_current_user)):
     """Delete a patient. Their triage records are removed (ON DELETE CASCADE)
     and any bed they occupied is released for Cleaning, in one transaction."""
     with Session(engine) as session:
-        patient = session.get(Patient, patient_id)
-        if patient is None:
-            raise HTTPException(status_code=404, detail="Patient not found")
-        for bed in session.exec(select(Bed).where(Bed.patient_id == patient_id)).all():
+        patient = _lock_patient(session, patient_id)  # same lock order as assign_bed
+        for bed in session.exec(
+            select(Bed).where(Bed.patient_id == patient_id).with_for_update()
+        ).all():
             bed.status, bed.patient, bed.patient_id = "Cleaning", None, None
             session.add(bed)
         for record in session.exec(
@@ -522,6 +552,13 @@ def list_triage(
     if patient_id is not None:
         filters.append(TriageRecord.patient_id == patient_id)
     if since is not None:
+        # Compare in UTC on every backend: aware values are converted, naive
+        # values are interpreted as UTC (SQLite stores timestamps without offset).
+        since = (
+            since.replace(tzinfo=timezone.utc)
+            if since.tzinfo is None
+            else since.astimezone(timezone.utc)
+        )
         filters.append(TriageRecord.created_at >= since)
     with Session(engine) as session:
         total = session.exec(select(func.count()).select_from(TriageRecord).where(*filters)).one()

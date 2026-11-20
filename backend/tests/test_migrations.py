@@ -109,3 +109,20 @@ def test_seed_script_is_idempotent(db_url, monkeypatch):
     engine.dispose()
     assert counts == {"bed": 5, "user": 1, "patient": 4, "triage_record": 4}
     assert linked == 3
+
+
+def test_seed_does_not_overwrite_edited_occupants(db_url, monkeypatch):
+    import main
+    import seed
+
+    _run(db_url, command.upgrade, "head")
+    engine = create_engine(db_url)
+    monkeypatch.setattr(main, "engine", engine)
+    main.seed_demo_data()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE bed SET patient = 'Someone Else' WHERE num = '101'"))
+    seed.run()
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT patient, patient_id FROM bed WHERE num = '101'")).one()
+    engine.dispose()
+    assert row == ("Someone Else", None)

@@ -184,7 +184,7 @@ def test_assign_rejects_unavailable_bed_and_double_booking(client, auth):
     other = client.post("/beds", json={"num": "301"}, headers=auth).json()["id"]
     second = client.post(f"/beds/{other}/assign", json={"patient_id": patient["id"]}, headers=auth)
     assert second.status_code == 409 and "103" in second.json()["detail"]
-    assert client.post(f"/beds/{free}/assign", json={"patient_id": 9999}, headers=auth).status_code == 409
+    assert client.post(f"/beds/{free}/assign", json={"patient_id": 9999}, headers=auth).status_code == 404
     assert client.post(f"/beds/{other}/assign", json={"patient_id": 9999}, headers=auth).status_code == 404
 
 
@@ -250,3 +250,85 @@ def test_db_rejects_out_of_range_patient_age(in_memory_engine):
         session.add(Patient(full_name="Old", age=200))
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_patching_status_with_same_name_keeps_registered_patient(client, auth):
+    """The dashboard always re-sends the displayed name; that must not unlink."""
+    patient = _new_patient(client, auth)
+    bed_id = _bed_id(client, "103")
+    client.post(f"/beds/{bed_id}/assign", json={"patient_id": patient["id"]}, headers=auth)
+    bed = client.patch(
+        f"/beds/{bed_id}", json={"status": "Pending_Discharge", "patient": " Ana Test "}, headers=auth
+    ).json()
+    assert bed["status"] == "Pending_Discharge" and bed["patient_id"] == patient["id"]
+    assert client.get(f"/patients/{patient['id']}", headers=auth).json()["current_bed"] == "103"
+
+
+def test_whitespace_only_names_are_rejected(client, auth):
+    assert client.post("/patients", json={"full_name": "   ", "age": 40}, headers=auth).status_code == 422
+    assert client.post("/beds", json={"num": "  "}, headers=auth).status_code == 422
+    blank = {"patient_name": "  ", "age": 40, "oxygen_level": 99}
+    assert client.post("/triage", json=blank, headers=auth).status_code == 422
+
+
+def test_triage_since_filter_is_timezone_aware(client, auth, patched_engine):
+    from datetime import datetime, timezone
+
+    record = client.post("/triage", json={"patient_name": "TZ", "age": 30, "oxygen_level": 99}, headers=auth).json()
+    with Session(patched_engine) as session:
+        row = session.get(TriageRecord, record["id"])
+        row.created_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        session.add(row)
+        session.commit()
+
+    def total(since):
+        return client.get("/triage", params={"since": since}, headers=auth).json()["total"]
+
+    # 13:00+02:00 == 11:00 UTC, before the 12:00 UTC record -> included
+    assert total("2026-01-01T11:00:00Z") == total("2026-01-01T13:00:00+02:00") == 1
+    # 15:00+02:00 == 13:00 UTC, after the record -> excluded
+    assert total("2026-01-01T13:00:00Z") == total("2026-01-01T15:00:00+02:00") == 0
+    assert total("2026-01-01T11:00:00") == 1  # naive values are treated as UTC
+
+
+def test_concurrent_assignments_to_one_bed_only_one_wins(tmp_path, monkeypatch):
+    """Separate connections to a file-backed SQLite DB race for the same bed."""
+    import threading
+
+    from fastapi.testclient import TestClient
+    from sqlmodel import SQLModel, create_engine
+
+    import database
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'race.db'}", connect_args={"check_same_thread": False, "timeout": 30}
+    )
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(database, "engine", engine)
+    monkeypatch.setattr(main, "engine", engine)
+
+    with TestClient(main.app) as client:
+        token = client.post("/auth/login", json=DEMO).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        ids = [_new_patient(client, headers, f"Racer {i}")["id"] for i in range(8)]
+        bed_id = _bed_id(client, "103")
+
+        results = []
+        barrier = threading.Barrier(len(ids))
+
+        def attempt(pid):
+            barrier.wait()
+            results.append(
+                client.post(f"/beds/{bed_id}/assign", json={"patient_id": pid}, headers=headers).status_code
+            )
+
+        threads = [threading.Thread(target=attempt, args=(pid,)) for pid in ids]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert sorted(results) == [200] + [409] * (len(ids) - 1)
+        bed = client.get(f"/beds/{bed_id}").json()
+        assert bed["status"] == "Occupied" and bed["patient_id"] in ids
+    engine.dispose()
