@@ -9,8 +9,8 @@ databases:
   - name: sachealth-db
     plan: free            # free Render Postgres expires after 30 days; use basic-256mb to keep data
     region: oregon
-    databaseName: sachealth
-    user: sachealth
+    databaseName: sachealth_db
+    user: sachealth_db_user
     postgresMajorVersion: "17"
     ipAllowList: []       # only reachable from Render services over the private network
 
