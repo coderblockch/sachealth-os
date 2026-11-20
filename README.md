@@ -26,7 +26,11 @@
 |---|
 | ![Swagger API docs](docs/screenshot-api-docs.png) |
 
-🎬 **Demo video:** _coming soon (2-minute walkthrough)._ <!-- TODO(David): record a 2-min demo (triage → login → update a bed) and link it here -->
+### 🎬 Demo (2 min)
+
+[![SacHealth OS demo: triage, staff login, bed assignment and API docs](docs/sachealth-demo.gif)](docs/sachealth-demo.mp4)
+
+▶️ **[Watch the full 2-minute video (MP4)](docs/sachealth-demo.mp4)**: rule-based triage, staff sign-in, assigning a bed, and the OpenAPI docs (`/stats`, filtered `/beds`), recorded on the live Render deployment backed by PostgreSQL.
 
 ---
 
