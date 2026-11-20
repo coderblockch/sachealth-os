@@ -1,5 +1,19 @@
-# Render Blueprint: one free web service that serves the FastAPI API and the
-# static dashboard (index.html) from the same origin.
+# Render Blueprint: a PostgreSQL database plus one web service that serves the
+# FastAPI API and the static dashboard (index.html) from the same origin.
+#
+# Schema changes are applied with Alembic when the app starts
+# (DB_RUN_MIGRATIONS=true runs `alembic upgrade head` in the FastAPI lifespan),
+# because the free web plan does not support preDeployCommand. On a paid plan
+# you can instead use: preDeployCommand: cd backend && alembic upgrade head && python seed.py
+databases:
+  - name: sachealth-db
+    plan: free            # free Render Postgres expires after 30 days; use basic-256mb to keep data
+    region: oregon
+    databaseName: sachealth_db
+    user: sachealth_db_user
+    postgresMajorVersion: "17"
+    ipAllowList: []       # only reachable from Render services over the private network
+
 services:
   - type: web
     name: sachealth-os
@@ -14,10 +28,20 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sachealth-db
+          property: connectionString   # internal URL; postgres:// is normalized in database.py
       - key: JWT_SECRET
         generateValue: true
-      # Optional: point at PostgreSQL instead of the default SQLite file.
-      # Free-tier disks are ephemeral, so the SQLite demo data is re-seeded
-      # whenever the instance restarts or redeploys.
-      - key: DATABASE_URL
-        sync: false
+      # Schema is owned by Alembic: migrate on startup, never create_all.
+      - key: DB_RUN_MIGRATIONS
+        value: "true"
+      - key: DB_AUTO_CREATE
+        value: "false"
+      # Idempotent demo seed on startup: beds, demo staff account, and demo
+      # patients with triage history.
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: SEED_DEMO_PATIENTS
+        value: "true"

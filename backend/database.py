@@ -1,5 +1,8 @@
 import os
+import sqlite3
 
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlmodel import SQLModel, create_engine, Session
 
 # Default: a local SQLite file (created automatically on first run).
@@ -29,8 +32,35 @@ SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() in ("1", "true", "yes")
 # from different threads; other databases do not accept this argument.
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
+# Pool sizing only applies to server databases (PostgreSQL); SQLite ignores it.
+_pool_args = (
+    {}
+    if DATABASE_URL.startswith("sqlite")
+    else {
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "5")),
+        "pool_recycle": 1800,
+    }
+)
+
 # The engine is the core connection to the database
-engine = create_engine(DATABASE_URL, echo=SQL_ECHO, connect_args=_connect_args, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL, echo=SQL_ECHO, connect_args=_connect_args, pool_pre_ping=True, **_pool_args
+)
+
+# When true (default, handy for local SQLite), tables are created on startup.
+# In production the schema is managed by Alembic (`alembic upgrade head`), so
+# render.yaml sets DB_AUTO_CREATE=false.
+DB_AUTO_CREATE = os.getenv("DB_AUTO_CREATE", "true").lower() in ("1", "true", "yes")
+
+
+@event.listens_for(Engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+    """SQLite ignores FOREIGN KEY / ON DELETE rules unless this pragma is on."""
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def create_db_and_tables():

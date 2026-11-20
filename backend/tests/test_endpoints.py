@@ -27,7 +27,7 @@ def test_get_beds_returns_seeded_beds(client):
 def test_seeded_beds_have_expected_shape(client):
     beds = client.get("/beds").json()
     for bed in beds:
-        assert set(bed.keys()) == {"id", "num", "status", "patient"}
+        assert set(bed.keys()) == {"id", "num", "status", "patient", "patient_id", "updated_at"}
         assert isinstance(bed["id"], int)
 
     by_num = {bed["num"]: bed for bed in beds}

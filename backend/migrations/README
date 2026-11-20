@@ -1,0 +1,6 @@
+Alembic migrations for SacHealth OS.
+
+    cd backend
+    alembic upgrade head                     # apply all migrations (uses DATABASE_URL)
+    alembic revision --autogenerate -m "..." # after changing models.py; review the file!
+    alembic downgrade -1                     # undo the last migration
