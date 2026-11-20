@@ -1,5 +1,18 @@
-# Render Blueprint: one free web service that serves the FastAPI API and the
-# static dashboard (index.html) from the same origin.
+# Render Blueprint: a PostgreSQL database plus one web service that serves the
+# FastAPI API and the static dashboard (index.html) from the same origin.
+#
+# Schema changes are applied with Alembic before Uvicorn starts. The free web
+# plan does not support preDeployCommand; on a paid plan, move
+# "alembic upgrade head && python seed.py" to preDeployCommand instead.
+databases:
+  - name: sachealth-db
+    plan: free            # free Render Postgres expires after 30 days; use basic-256mb to keep data
+    region: oregon
+    databaseName: sachealth
+    user: sachealth
+    postgresMajorVersion: "17"
+    ipAllowList: []       # only reachable from Render services over the private network
+
 services:
   - type: web
     name: sachealth-os
@@ -9,15 +22,26 @@ services:
     branch: main
     autoDeploy: true
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: >-
+      cd backend &&
+      alembic upgrade head &&
+      python seed.py &&
+      uvicorn main:app --host 0.0.0.0 --port $PORT
+    # On paid plans:
+    # preDeployCommand: cd backend && alembic upgrade head && python seed.py
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sachealth-db
+          property: connectionString   # internal URL; postgres:// is normalized in database.py
       - key: JWT_SECRET
         generateValue: true
-      # Optional: point at PostgreSQL instead of the default SQLite file.
-      # Free-tier disks are ephemeral, so the SQLite demo data is re-seeded
-      # whenever the instance restarts or redeploys.
-      - key: DATABASE_URL
-        sync: false
+      # Schema is owned by Alembic, so don't create tables from the app.
+      - key: DB_AUTO_CREATE
+        value: "false"
+      # Idempotent demo seed (beds + demo staff account) on startup.
+      - key: SEED_DEMO_DATA
+        value: "true"
