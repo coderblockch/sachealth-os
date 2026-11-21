@@ -18,6 +18,22 @@
 
 ## 📸 Screenshots
 
+### React app (`/app`)
+
+| Dashboard: stats cards + charts | Triage form + filterable history |
+|---|---|
+| ![React dashboard](docs/screenshots/react-dashboard.png) | ![React triage](docs/screenshots/react-triage.png) |
+
+| Beds board: assign / discharge | Patients: search + pagination |
+|---|---|
+| ![React beds board](docs/screenshots/react-beds.png) | ![React patients](docs/screenshots/react-patients.png) |
+
+| Patient detail with triage timeline | Login | Mobile |
+|---|---|---|
+| ![React patient detail](docs/screenshots/react-patient-detail.png) | ![React login](docs/screenshots/react-login.png) | ![React mobile dashboard](docs/screenshots/react-mobile-dashboard.png) |
+
+### Classic dashboard (`/classic`) and API docs
+
 | Dashboard: triage + bed status | Signed in as staff: beds can be updated |
 |---|---|
 | ![SacHealth OS dashboard](docs/screenshot.png) | ![Staff view with bed editing](docs/screenshot-staff.png) |
@@ -42,16 +58,17 @@
 - **REST API + SQL database:** FastAPI with Pydantic validation and SQLModel (SQLAlchemy) persistence. SQLite by default, PostgreSQL via `DATABASE_URL`.
 - **Resilient UI:** live SYSTEM ONLINE / BACKEND OFFLINE badge and friendly error messages when the API is down.
 - **Patients & triage history:** stored triage results, patient search, filtering and pagination, transactional bed assignment.
-- **Tested and automated:** 75 pytest tests (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
+- **React + TypeScript app:** typed API client, JWT auth context with protected routes, TanStack Query caching, validated accessible forms, responsive layout (see the Frontend section below).
+- **Tested and automated:** 38 Vitest/React Testing Library tests for the frontend and 83 pytest tests for the API (migration tests also run on PostgreSQL in CI), GitHub Actions CI and CodeQL on every push and pull request.
 
 ## 🛠️ Tech Stack
 
 | Layer | Technologies |
 |-------|--------------|
-| Frontend | HTML5, Tailwind CSS, Lucide icons, vanilla JavaScript (Fetch API) |
+| Frontend | React 18, TypeScript, Vite, React Router, TanStack Query, React Hook Form + Zod, Tailwind CSS (classic page: vanilla JS) |
 | Backend | Python, FastAPI, Pydantic, Uvicorn, PyJWT, bcrypt |
 | Database | PostgreSQL (`psycopg`) · SQLite for local dev/tests · SQLModel / SQLAlchemy ORM · Alembic migrations |
-| Testing & CI | pytest, FastAPI TestClient, GitHub Actions, CodeQL |
+| Testing & CI | pytest, FastAPI TestClient, Vitest, React Testing Library, ESLint, GitHub Actions, CodeQL |
 | Hosting | Render (`render.yaml` Blueprint) |
 
 ---
@@ -59,12 +76,22 @@
 ## 🏗️ Architecture
 
 ```
-Browser ──► FastAPI (Uvicorn) ──► SQLModel / SQLAlchemy ──► PostgreSQL (production) | SQLite (local)
-                                        ▲
-                       Alembic migrations (schema versioning)
+Browser
+  ├─ /app/*  ──────────────► FastAPI serves the React build (frontend/dist), SPA fallback to index.html
+  ├─ /classic, /docs ──────► original vanilla-JS dashboard, OpenAPI docs
+  └─ fetch + JWT Bearer ───► REST API (/auth /beds /patients /triage /stats)
+                                   │
+                                   ▼
+                     SQLModel / SQLAlchemy ──► PostgreSQL (Render) | SQLite (local)
+                                   ▲
+                     Alembic migrations (run on startup)
+
+Inside the React app:
+  pages ─► TanStack Query hooks (cache + invalidation) ─► typed API client (fetch, JWT, ApiError)
+  AuthContext (token in localStorage, verified with /auth/me) · RequireAuth route guard
 ```
 
-One web service serves both the UI and the API (same origin, no CORS needed in production). Full interactive docs at `/docs`.
+One web service serves both the UI and the API (same origin, so no CORS in production). `/` redirects to the React app at `/app/` when it has been built. The app lives under `/app` so its routes (`/app/beds`, `/app/patients/3`) never collide with API paths (`/beds`, `/patients/3`). Full interactive docs at `/docs`.
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|
@@ -148,6 +175,43 @@ uvicorn main:app --reload
 | `DEMO_USER_EMAIL` / `DEMO_USER_PASSWORD` | demo account | Seeded staff account |
 | `ALLOWED_ORIGINS` | local dev servers | CORS allow-list (comma-separated) |
 
+## ⚛️ Frontend (React + TypeScript)
+
+The React app in [`frontend/`](frontend) consumes the same API. The design decisions are explained in plain English in [`docs/FRONTEND_WALKTHROUGH.md`](docs/FRONTEND_WALKTHROUGH.md).
+
+| Page | What it does | API |
+|------|--------------|-----|
+| Login | Validated form, stores the JWT, returns you to the page you wanted | `POST /auth/login`, `GET /auth/me` |
+| Dashboard | Stat cards and bar charts | `GET /stats` |
+| Triage | Rules-based triage for a new or existing patient, plus paginated history with a priority filter kept in the URL | `POST /triage`, `GET /triage` |
+| Patients | Debounced search, pagination, register a patient, detail page with triage timeline and current bed | `GET/POST /patients`, `GET /patients/{id}` |
+| Beds | Status grid with filters, assign a patient (searchable picker), discharge | `GET /beds`, `POST /beds/{id}/assign` and `/discharge` |
+
+```bash
+# terminal 1: API
+cd backend && uvicorn main:app --reload           # http://127.0.0.1:8000
+# terminal 2: React dev server (proxies API calls to :8000)
+cd frontend && npm install && npm run dev          # http://localhost:5173/app/
+```
+
+```bash
+cd frontend
+npm run lint        # ESLint (0 warnings allowed)
+npm run typecheck   # tsc, strict mode
+npm test            # Vitest + React Testing Library (38 tests)
+npm run build       # production build into frontend/dist, served by FastAPI at /app
+```
+
+```
+frontend/src/
+├── api/          # types.ts (mirrors the API), client.ts (fetch + JWT + errors), endpoints.ts, hooks.ts (TanStack Query)
+├── auth/         # AuthContext (login/logout, /auth/me), RequireAuth route guard, tokenStorage
+├── components/   # Layout, TriageForm, TriageHistory, BedCard, PatientPicker, BarChart, Pagination, FormField, badges, loading/error/empty states
+├── pages/        # Login, Dashboard, Triage, Patients, PatientDetail, Beds, NotFound
+├── lib/          # form schemas (Zod), formatting, query client, useDebouncedValue
+└── __tests__/    # component tests (+ *.test.ts next to the code they test)
+```
+
 ## 🧪 Run Tests
 
 ```bash
@@ -158,11 +222,11 @@ pytest            # API, auth, triage, CRUD, constraints, migrations and seed
 TEST_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/sachealth_test pytest tests/test_migrations.py
 ```
 
-API tests run against an isolated in-memory SQLite database. [GitHub Actions](https://github.com/coderblockch/sachealth-os/actions/workflows/ci.yml) runs the suite plus a PostgreSQL 17 job (migrations up/down, model/migration drift check, idempotent seed) on every push and pull request.
+API tests run against an isolated in-memory SQLite database. [GitHub Actions](https://github.com/coderblockch/sachealth-os/actions/workflows/ci.yml) runs the API suite, the frontend job (lint, typecheck, tests, build) and a PostgreSQL 17 job (migrations up/down, model/migration drift check, idempotent seed) on every push and pull request.
 
 ## ☁️ Deployment (Render)
 
-[`render.yaml`](render.yaml) defines a Render PostgreSQL database (`sachealth-db`) and the web service. `DATABASE_URL` comes from the database's internal connection string. With `DB_RUN_MIGRATIONS=true` the app runs `alembic upgrade head` on startup and then seeds the demo data (idempotent), because Render's free plan has no pre-deploy command. Pushes to `main` redeploy automatically.
+[`render.yaml`](render.yaml) defines a Render PostgreSQL database (`sachealth-db`) and the web service. The build command installs the API and builds the React app: `pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build`. `DATABASE_URL` comes from the database's internal connection string. With `DB_RUN_MIGRATIONS=true` the app runs `alembic upgrade head` on startup and then seeds the demo data (idempotent), because Render's free plan has no pre-deploy command. Pushes to `main` redeploy automatically.
 
 ---
 
@@ -175,7 +239,7 @@ API tests run against an isolated in-memory SQLite database. [GitHub Actions](ht
 - [x] Save triaged patients and assign them to beds (`patient` / `triage_record` tables with foreign keys)
 - [ ] Role-based permissions (nurse vs. admin)
 - [x] PostgreSQL support with Alembic migrations
-- [ ] Show triage history and bed assignment in the dashboard UI
+- [x] Show triage history and bed assignment in the UI (React app)
 
 ## 👤 Author
 

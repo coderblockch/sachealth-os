@@ -8,7 +8,7 @@ from typing import Annotated, Generic, Literal, Optional, TypeVar
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -29,6 +29,11 @@ logger = logging.getLogger("sachealth")
 
 # The static dashboard lives at the repository root (../index.html).
 FRONTEND_FILE = Path(__file__).resolve().parent.parent / "index.html"
+# The React app (frontend/), built by `npm run build` into frontend/dist and
+# served under /app so its routes never collide with API paths like /beds.
+FRONTEND_DIST = Path(
+    os.getenv("FRONTEND_DIST", Path(__file__).resolve().parent.parent / "frontend" / "dist")
+)
 
 # Public demo account (fake data only). Override with env vars in production.
 DEMO_USER_EMAIL = os.getenv("DEMO_USER_EMAIL", "demo@sachealth.dev")
@@ -123,6 +128,7 @@ _allowed_origins = [
         "ALLOWED_ORIGINS",
         "http://localhost:5500,http://127.0.0.1:5500,"
         "http://localhost:8080,http://127.0.0.1:8080,"
+        "http://localhost:5173,http://127.0.0.1:5173,"
         "https://coderblockch.github.io",
     ).split(",")
     if origin.strip()
@@ -248,10 +254,50 @@ Limit = Query(50, ge=1, le=200, description="Page size")
 Offset = Query(0, ge=0, description="Rows to skip")
 
 
+def _react_build_available() -> bool:
+    return (FRONTEND_DIST / "index.html").is_file()
+
+
+def _react_build_files() -> dict[str, Path]:
+    """Every file in the React build, keyed by its URL path (e.g. "assets/index.js")."""
+    root = FRONTEND_DIST.resolve()
+    return {file.relative_to(root).as_posix(): file for file in root.rglob("*") if file.is_file()}
+
+
 @app.get("/", include_in_schema=False)
 def frontend():
-    """Serve the dashboard so one service hosts both the UI and the API."""
+    """Send visitors to the React app when it has been built; otherwise serve
+    the original single-file dashboard, so one service hosts UI and API."""
+    if _react_build_available():
+        return RedirectResponse("/app/", status_code=307)
     return FileResponse(FRONTEND_FILE)
+
+
+@app.get("/classic", include_in_schema=False)
+def classic_dashboard():
+    """The original vanilla-JS dashboard (index.html), kept for reference."""
+    return FileResponse(FRONTEND_FILE)
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/{path:path}", include_in_schema=False)
+def react_app(path: str = ""):
+    """Serve the React build: real files (JS/CSS/images) as-is, and index.html
+    for every other path so React Router can handle client-side routes."""
+    if not _react_build_available():
+        raise HTTPException(
+            status_code=404,
+            detail="React frontend not built. Run: cd frontend && npm ci && npm run build",
+        )
+    # Only files that exist in the build can be served: the request path is
+    # looked up in this map, never joined onto the filesystem, so "../" tricks
+    # cannot reach anything outside frontend/dist.
+    files = _react_build_files()
+    if path in files:
+        return FileResponse(files[path])
+    if path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(files["index.html"])
 
 
 @app.get("/health")
